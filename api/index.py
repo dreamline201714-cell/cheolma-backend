@@ -5,7 +5,6 @@ import requests
 
 app = FastAPI()
 
-# CORS 완벽 허용
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -14,18 +13,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 한글 종목명 -> 티커 매핑 테이블 (필요시 추가 가능)
-KOREAN_STOCK_MAP = {
-    "삼성전자": "005930",
-    "SK하이닉스": "000660",
-    "삼성전기": "009150",
-    "현대차": "005380",
-    "NAVER": "035420",
-    "카카오": "035720",
-    "엔비디아": "NVDA",
-    "애플": "AAPL",
-    "마이크로소프트": "MSFT",
-    "테슬라": "TSLA"
+# 토스증권 API 종목 매핑 (티커/한글 -> 토스 규격 Symbol)
+SYMBOL_MAP = {
+    "005930": "A005930",
+    "삼성전자": "A005930",
+    "000660": "A000660",
+    "SK하이닉스": "A000660",
+    "009150": "A009150",
+    "삼성전기": "A009150",
+    "NVDA": "NVDA",
+    "AAPL": "AAPL",
+    "MSFT": "MSFT",
+    "TSLA": "TSLA"
 }
 
 def get_toss_token():
@@ -50,19 +49,28 @@ def get_toss_token():
         print(f"Token Error: {e}")
     return None
 
-@app.get("/api/toss/stock/{symbol_or_name}")
-def get_toss_stock_info(symbol_or_name: str):
+@app.get("/api/toss/stock/{query}")
+def get_toss_stock_info(query: str):
     token = get_toss_token()
     if not token:
         return {"status": "error", "message": "API 인증 실패"}
 
-    # 한글 검색어 입력 시 종목 코드로 변환
-    target_symbol = KOREAN_STOCK_MAP.get(symbol_or_name.strip(), symbol_or_name.strip().upper())
+    clean_query = query.strip()
+    target_symbol = SYMBOL_MAP.get(clean_query, SYMBOL_MAP.get(clean_query.upper(), clean_query))
 
     url = f"https://openapi.tossinvest.com/api/v1/stocks?symbols={target_symbol}"
     headers = {"Authorization": f"Bearer {token}"}
+    
     try:
         res = requests.get(url, headers=headers, timeout=5)
-        return res.json()
+        res_json = res.json()
+        
+        # 만약 매핑된 심볼로도 조회가 실패하면 원본 입력값으로 2차 시도
+        if not res_json.get("result") and target_symbol != clean_query:
+            fallback_url = f"https://openapi.tossinvest.com/api/v1/stocks?symbols={clean_query}"
+            res = requests.get(fallback_url, headers=headers, timeout=5)
+            res_json = res.json()
+            
+        return res_json
     except Exception as e:
         return {"status": "error", "message": str(e)}
