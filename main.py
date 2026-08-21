@@ -14,6 +14,7 @@ app.add_middleware(
 
 SYMBOLS = [
     {"symbol": "^IXIC", "name": "NASDAQ INDEX"},
+    # M7 (Magnificent 7)
     {"symbol": "MSFT", "name": "Microsoft (MSFT)"},
     {"symbol": "AAPL", "name": "Apple (AAPL)"},
     {"symbol": "GOOGL", "name": "Alphabet/Google (GOOGL)"},
@@ -21,7 +22,8 @@ SYMBOLS = [
     {"symbol": "NVDA", "name": "NVIDIA (NVDA)"},
     {"symbol": "META", "name": "Meta (META)"},
     {"symbol": "TSLA", "name": "Tesla (TSLA)"},
-    {"symbol": "CPNG", "name": "Coupang (CPNG)"},
+    # 주요 개별주, ETF & ADR
+    {"symbol": "KORU", "name": "Korea Bull 3X ETF (KORU)"},
     {"symbol": "MRVL", "name": "Marvell Tech (MRVL)"},
     {"symbol": "HXSCF", "name": "SK Hynix ADR (HXSCF)"}
 ]
@@ -34,7 +36,7 @@ def health_check():
 def get_us_market():
     stock_list = []
     
-    # 1. 개별 주식 수집
+    # 1. 개별 주식 & ETF 수집
     for item in SYMBOLS[1:]:
         sym = item["symbol"]
         disp_name = item["name"]
