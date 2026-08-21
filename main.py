@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import yfinance as yf
 
 app = FastAPI()
+app.mount("/images", StaticFiles(directory="."), name="images")
 
 app.add_middleware(
     CORSMiddleware,
@@ -87,3 +88,6 @@ def get_us_market():
         "chartLabels": chart_labels,
         "chartData": chart_data
     }
+
+from fastapi.staticfiles import StaticFiles
+import os
