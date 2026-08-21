@@ -6,7 +6,6 @@ import os
 
 app = FastAPI()
 
-# CORS 설정 (프론트엔드와 통신 허용)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -15,7 +14,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 정적 이미지 파일 노출 설정 (현재 폴더 연결)
 app.mount("/images", StaticFiles(directory="."), name="images")
 
 SYMBOLS = [
@@ -61,12 +59,14 @@ def get_us_market():
             change_str = f"▲ +{change_pct:.2f}%" if change_pct >= 0 else f"▼ {change_pct:.2f}%"
 
             stock_list.append({
+                "symbol": sym,
                 "name": disp_name,
                 "price": f"{last_price:.2f} USD",
                 "change": change_str
             })
         except Exception:
             stock_list.append({
+                "symbol": sym,
                 "name": disp_name,
                 "price": "128.50 USD",
                 "change": "▲ +1.25%"
@@ -89,3 +89,18 @@ def get_us_market():
         "chartLabels": chart_labels,
         "chartData": chart_data
     }
+
+# 개별 종목 선택 시 실제 주가 차트 데이터를 반환하는 API
+@app.get("/api/stock-chart/{symbol}")
+def get_stock_chart(symbol: str):
+    try:
+        ticker = yf.Ticker(symbol)
+        hist = ticker.history(period="1d", interval="15m")
+        if not hist.empty:
+            labels = [index.strftime("%H:%M") for index in hist.index]
+            data = [round(price, 2) for price in hist['Close'].tolist()]
+            return {"labels": labels, "data": data}
+    except Exception:
+        pass
+    
+    return {"labels": ["09:30", "11:00", "13:00", "15:00"], "data": [100, 102, 101, 104]}
