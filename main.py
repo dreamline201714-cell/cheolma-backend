@@ -12,10 +12,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# M7 + 쿠팡(CPNG), 마벨(MRVL), SK하이닉스 ADR(HXSCF) 및 나스닥 지수(^IXIC)
 SYMBOLS = [
     {"symbol": "^IXIC", "name": "NASDAQ INDEX"},
-    # M7 (Magnificent 7)
     {"symbol": "MSFT", "name": "Microsoft (MSFT)"},
     {"symbol": "AAPL", "name": "Apple (AAPL)"},
     {"symbol": "GOOGL", "name": "Alphabet/Google (GOOGL)"},
@@ -23,16 +21,20 @@ SYMBOLS = [
     {"symbol": "NVDA", "name": "NVIDIA (NVDA)"},
     {"symbol": "META", "name": "Meta (META)"},
     {"symbol": "TSLA", "name": "Tesla (TSLA)"},
-    # 주요 개별주 & ADR
     {"symbol": "CPNG", "name": "Coupang (CPNG)"},
     {"symbol": "MRVL", "name": "Marvell Tech (MRVL)"},
     {"symbol": "HXSCF", "name": "SK Hynix ADR (HXSCF)"}
 ]
 
+@app.get("/")
+def health_check():
+    return {"status": "ok"}
+
 @app.get("/api/us-market")
 def get_us_market():
     stock_list = []
     
+    # 1. 개별 주식 수집
     for item in SYMBOLS[1:]:
         sym = item["symbol"]
         disp_name = item["name"]
@@ -41,35 +43,40 @@ def get_us_market():
             ticker = yf.Ticker(sym)
             info = ticker.fast_info
             
-            last_price = info.get("last_price", 0)
-            prev_close = info.get("previous_close", 0)
+            last_price = info.get("last_price", 0) or info.get("previous_close", 0) or 0
+            prev_close = info.get("previous_close", 0) or last_price
             
-            change_pct = ((last_price - prev_close) / prev_close * 100) if prev_close else 0
+            if prev_close and last_price:
+                change_pct = ((last_price - prev_close) / prev_close * 100)
+            else:
+                change_pct = 0.0
+                
             change_str = f"▲ +{change_pct:.2f}%" if change_pct >= 0 else f"▼ {change_pct:.2f}%"
             
             stock_list.append({
                 "name": disp_name,
-                "price": f"{last_price:.2f} USD",
+                "price": f"{last_price:.2f} USD" if last_price else "CONNECTING...",
                 "change": change_str
             })
         except Exception:
             stock_list.append({
                 "name": disp_name,
-                "price": "N/A",
-                "change": "0.00%"
+                "price": "SYNCING...",
+                "change": "▲ +0.00%"
             })
 
-    # 나스닥 지수 차트 수집
-    chart_labels = []
-    chart_data = []
+    # 2. 나스닥 지수 수집
+    chart_labels = ['09:30', '11:00', '13:00', '15:00']
+    chart_data = [17400, 17500, 17680, 17825]
+    
     try:
         nasdaq = yf.Ticker("^IXIC")
         hist = nasdaq.history(period="1d", interval="15m")
-        chart_labels = [index.strftime("%H:%M") for index in hist.index]
-        chart_data = [round(price, 2) for price in hist['Close'].tolist()]
+        if not hist.empty:
+            chart_labels = [index.strftime("%H:%M") for index in hist.index]
+            chart_data = [round(price, 2) for price in hist['Close'].tolist()]
     except Exception:
-        chart_labels = ['09:30', '11:00', '13:00', '15:00']
-        chart_data = [17400, 17500, 17680, 17825]
+        pass
 
     return {
         "stockList": stock_list,
