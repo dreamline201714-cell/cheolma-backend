@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-import yfinance as yf
+import requests
 import os
 
 app = FastAPI()
@@ -16,91 +16,46 @@ app.add_middleware(
 
 app.mount("/images", StaticFiles(directory="."), name="images")
 
-SYMBOLS = [
-    {"symbol": "^IXIC", "name": "NASDAQ COMPOSITE"},
-    {"symbol": "NVDA", "name": "NVIDIA (NVDA)"},
-    {"symbol": "AAPL", "name": "Apple (AAPL)"},
-    {"symbol": "GOOGL", "name": "Alphabet/Google (GOOGL)"},
-    {"symbol": "AMZN", "name": "Amazon (AMZN)"},
-    {"symbol": "MSFT", "name": "Microsoft (MSFT)"},
-    {"symbol": "META", "name": "Meta (META)"},
-    {"symbol": "TSLA", "name": "Tesla (TSLA)"},
-    {"symbol": "KORU", "name": "Korea Bull 3X ETF (KORU)"},
-    {"symbol": "MRVL", "name": "Marvell Tech (MRVL)"},
-    {"symbol": "HXSCF", "name": "SK Hynix ADR (HXSCF)"}
-]
+# 깃허브 코드에는 키를 적지 않고, 서버 환경 변수에서 가져옴
+TOSS_CLIENT_ID = os.getenv("TOSS_CLIENT_ID")
+TOSS_CLIENT_SECRET = os.getenv("TOSS_CLIENT_SECRET")
+TOSS_BASE_URL = "https://openapi.tossinvest.com"
 
-@app.get("/")
-def read_root():
-    return {"status": "CHEOLMA BACKEND ONLINE"}
+# 토스증권 OAuth2 액세스 토큰 발급 (시세 전용)
+def get_toss_access_token():
+    if not TOSS_CLIENT_ID or not TOSS_CLIENT_SECRET:
+        print("Toss API Keys are missing in Environment Variables")
+        return None
 
-@app.get("/api/us-market")
-def get_us_market():
-    stock_list = []
-
-    for item in SYMBOLS[1:]:
-        sym = item["symbol"]
-        disp_name = item["name"]
-
-        try:
-            ticker = yf.Ticker(sym)
-            hist = ticker.history(period="5d")
-
-            if len(hist) >= 2:
-                last_price = float(hist['Close'].iloc[-1])
-                prev_close = float(hist['Close'].iloc[-2])
-                change_pct = ((last_price - prev_close) / prev_close) * 100
-            elif len(hist) == 1:
-                last_price = float(hist['Close'].iloc[-1])
-                change_pct = 0.0
-            else:
-                raise ValueError("No history found")
-
-            change_str = f"▲ +{change_pct:.2f}%" if change_pct >= 0 else f"▼ {change_pct:.2f}%"
-
-            stock_list.append({
-                "symbol": sym,
-                "name": disp_name,
-                "price": f"{last_price:.2f} USD",
-                "change": change_str
-            })
-        except Exception:
-            stock_list.append({
-                "symbol": sym,
-                "name": disp_name,
-                "price": "128.50 USD",
-                "change": "▲ +1.25%"
-            })
-
-    chart_labels = ['09:30', '11:00', '13:00', '15:00']
-    chart_data = [17400, 17500, 17680, 17825]
-
-    try:
-        nasdaq = yf.Ticker("^IXIC")
-        hist = nasdaq.history(period="1d", interval="15m")
-        if not hist.empty:
-            chart_labels = [index.strftime("%H:%M") for index in hist.index]
-            chart_data = [round(price, 2) for price in hist['Close'].tolist()]
-    except Exception:
-        pass
-
-    return {
-        "stockList": stock_list,
-        "chartLabels": chart_labels,
-        "chartData": chart_data
+    url = f"{TOSS_BASE_URL}/oauth2/token"
+    headers = {"Content-Type": "application/x-www-form-urlencoded"}
+    data = {
+        "grant_type": "client_credentials",
+        "client_id": TOSS_CLIENT_ID,
+        "client_secret": TOSS_CLIENT_SECRET
     }
-
-# 개별 종목 선택 시 실제 주가 차트 데이터를 반환하는 API
-@app.get("/api/stock-chart/{symbol}")
-def get_stock_chart(symbol: str):
     try:
-        ticker = yf.Ticker(symbol)
-        hist = ticker.history(period="1d", interval="15m")
-        if not hist.empty:
-            labels = [index.strftime("%H:%M") for index in hist.index]
-            data = [round(price, 2) for price in hist['Close'].tolist()]
-            return {"labels": labels, "data": data}
-    except Exception:
-        pass
+        res = requests.post(url, headers=headers, data=data, timeout=5)
+        if res.status_code == 200:
+            return res.json().get("access_token")
+    except Exception as e:
+        print(f"Toss Token Error: {e}")
+    return None
+
+@app.get("/api/toss/stock/{symbol}")
+def get_toss_stock_price(symbol: str):
+    token = get_toss_access_token()
+    if not token:
+        return {"status": "error", "message": "API Key 인증 실패"}
+
+    url = f"{TOSS_BASE_URL}/api/v1/stocks?symbols={symbol}"
+    headers = {"Authorization": f"Bearer {token}"}
     
-    return {"labels": ["09:30", "11:00", "13:00", "15:00"], "data": [100, 102, 101, 104]}
+    try:
+        res = requests.get(url, headers=headers, timeout=5)
+        if res.status_code == 200:
+            return res.json()
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+    return {"status": "error", "message": "시세 데이터 요청 실패"}
