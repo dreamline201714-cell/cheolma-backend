@@ -20,6 +20,24 @@ SYMBOL_MAP = {
     "NVDA": "NVDA", "AAPL": "AAPL", "MSFT": "MSFT", "TSLA": "TSLA"
 }
 
+# 1. IP 및 환경변수 상태 진단용 API
+@app.get("/api/debug-env")
+def debug_env():
+    client_id = os.environ.get("TOSS_CLIENT_ID") or os.getenv("TOSS_CLIENT_ID")
+    client_secret = os.environ.get("TOSS_CLIENT_SECRET") or os.getenv("TOSS_CLIENT_SECRET")
+    
+    outbound_ip = "확인 불가"
+    try:
+        outbound_ip = requests.get("https://api.ipify.org", timeout=5).text
+    except Exception as e:
+        outbound_ip = str(e)
+        
+    return {
+        "has_client_id": bool(client_id),
+        "has_client_secret": bool(client_secret),
+        "vercel_outbound_ip": outbound_ip
+    }
+
 def get_toss_token():
     client_id = os.environ.get("TOSS_CLIENT_ID") or os.getenv("TOSS_CLIENT_ID")
     client_secret = os.environ.get("TOSS_CLIENT_SECRET") or os.getenv("TOSS_CLIENT_SECRET")
@@ -38,6 +56,8 @@ def get_toss_token():
         res = requests.post(url, headers=headers, data=data, timeout=5)
         if res.status_code == 200:
             return res.json().get("access_token")
+        else:
+            print("Toss Token Res Error:", res.text)
     except Exception as e:
         print(f"Token Error: {e}")
     return None
@@ -45,7 +65,7 @@ def get_toss_token():
 def toss_get_request(path: str, params: str = ""):
     token = get_toss_token()
     if not token:
-        return {"status": "error", "message": "API 인증 실패"}
+        return {"status": "error", "message": "API 인증 실패 (환경변수/IP 등록 상태 확인 필요)"}
 
     url = f"https://openapi.tossinvest.com{path}"
     if params:
@@ -58,19 +78,16 @@ def toss_get_request(path: str, params: str = ""):
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
-# 1. 실시간 현재가 조회 (/api/v1/prices)
 @app.get("/api/toss/prices/{query}")
 def get_prices(query: str):
     symbol = SYMBOL_MAP.get(query.strip(), SYMBOL_MAP.get(query.strip().upper(), query.strip()))
     return toss_get_request("/api/v1/prices", f"symbols={symbol}")
 
-# 2. 실제 분봉 캔들 조회 (/api/v1/candles) - 실제 차트 데이터
 @app.get("/api/toss/candles/{query}")
 def get_candles(query: str):
     symbol = SYMBOL_MAP.get(query.strip(), SYMBOL_MAP.get(query.strip().upper(), query.strip()))
     return toss_get_request("/api/v1/candles", f"symbol={symbol}&interval=1m")
 
-# 3. 기타 토스 API 엔드포인트
 @app.get("/api/toss/orderbook/{query}")
 def get_orderbook(query: str):
     symbol = SYMBOL_MAP.get(query.strip(), SYMBOL_MAP.get(query.strip().upper(), query.strip()))
