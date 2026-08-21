@@ -1,10 +1,12 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 import yfinance as yf
+import os
 
 app = FastAPI()
-app.mount("/images", StaticFiles(directory="."), name="images")
 
+# CORS 설정 (프론트엔드와 통신 허용)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -13,14 +15,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 표출할 주요 종목 라인업
+# 정적 이미지 파일 노출 설정 (현재 폴더 연결)
+app.mount("/images", StaticFiles(directory="."), name="images")
+
 SYMBOLS = [
-    {"symbol": "^IXIC", "name": "NASDAQ INDEX"},
-    {"symbol": "MSFT", "name": "Microsoft (MSFT)"},
+    {"symbol": "^IXIC", "name": "NASDAQ COMPOSITE"},
+    {"symbol": "NVDA", "name": "NVIDIA (NVDA)"},
     {"symbol": "AAPL", "name": "Apple (AAPL)"},
     {"symbol": "GOOGL", "name": "Alphabet/Google (GOOGL)"},
     {"symbol": "AMZN", "name": "Amazon (AMZN)"},
-    {"symbol": "NVDA", "name": "NVIDIA (NVDA)"},
+    {"symbol": "MSFT", "name": "Microsoft (MSFT)"},
     {"symbol": "META", "name": "Meta (META)"},
     {"symbol": "TSLA", "name": "Tesla (TSLA)"},
     {"symbol": "KORU", "name": "Korea Bull 3X ETF (KORU)"},
@@ -29,22 +33,21 @@ SYMBOLS = [
 ]
 
 @app.get("/")
-def health_check():
-    return {"status": "ok"}
+def read_root():
+    return {"status": "CHEOLMA BACKEND ONLINE"}
 
 @app.get("/api/us-market")
 def get_us_market():
     stock_list = []
-    
-    # 1. 종목별 최근 주가 및 변동률 수집 (history 2일치 기반으로 안정화)
+
     for item in SYMBOLS[1:]:
         sym = item["symbol"]
         disp_name = item["name"]
-        
+
         try:
             ticker = yf.Ticker(sym)
             hist = ticker.history(period="5d")
-            
+
             if len(hist) >= 2:
                 last_price = float(hist['Close'].iloc[-1])
                 prev_close = float(hist['Close'].iloc[-2])
@@ -56,24 +59,22 @@ def get_us_market():
                 raise ValueError("No history found")
 
             change_str = f"▲ +{change_pct:.2f}%" if change_pct >= 0 else f"▼ {change_pct:.2f}%"
-            
+
             stock_list.append({
                 "name": disp_name,
                 "price": f"{last_price:.2f} USD",
                 "change": change_str
             })
-        except Exception as e:
-            # 야후 차단 또는 예외 발생 시 에러 없이 최신 추정치 전달
+        except Exception:
             stock_list.append({
                 "name": disp_name,
                 "price": "128.50 USD",
                 "change": "▲ +1.25%"
             })
 
-    # 2. 나스닥 지수 차트 수집
     chart_labels = ['09:30', '11:00', '13:00', '15:00']
     chart_data = [17400, 17500, 17680, 17825]
-    
+
     try:
         nasdaq = yf.Ticker("^IXIC")
         hist = nasdaq.history(period="1d", interval="15m")
@@ -88,6 +89,3 @@ def get_us_market():
         "chartLabels": chart_labels,
         "chartData": chart_data
     }
-
-from fastapi.staticfiles import StaticFiles
-import os
