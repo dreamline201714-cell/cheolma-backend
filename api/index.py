@@ -45,7 +45,7 @@ def get_toss_token():
 def toss_get_request(path: str, params: str = ""):
     token = get_toss_token()
     if not token:
-        return {"status": "error", "message": "API 인증 실패 (환경변수 확인 필요)"}
+        return {"status": "error", "message": "API 인증 실패"}
 
     url = f"https://openapi.tossinvest.com{path}"
     if params:
@@ -58,23 +58,24 @@ def toss_get_request(path: str, params: str = ""):
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
-# --- 1. Market Data (시세 API) ---
+# 1. 실시간 현재가 조회 (/api/v1/prices)
 @app.get("/api/toss/prices/{query}")
 def get_prices(query: str):
     symbol = SYMBOL_MAP.get(query.strip(), SYMBOL_MAP.get(query.strip().upper(), query.strip()))
     return toss_get_request("/api/v1/prices", f"symbols={symbol}")
 
+# 2. 실제 분봉 캔들 조회 (/api/v1/candles) - 실제 차트 데이터
+@app.get("/api/toss/candles/{query}")
+def get_candles(query: str):
+    symbol = SYMBOL_MAP.get(query.strip(), SYMBOL_MAP.get(query.strip().upper(), query.strip()))
+    return toss_get_request("/api/v1/candles", f"symbol={symbol}&interval=1m")
+
+# 3. 기타 토스 API 엔드포인트
 @app.get("/api/toss/orderbook/{query}")
 def get_orderbook(query: str):
     symbol = SYMBOL_MAP.get(query.strip(), SYMBOL_MAP.get(query.strip().upper(), query.strip()))
     return toss_get_request("/api/v1/orderbook", f"symbols={symbol}")
 
-@app.get("/api/toss/candles/{query}")
-def get_candles(query: str):
-    symbol = SYMBOL_MAP.get(query.strip(), SYMBOL_MAP.get(query.strip().upper(), query.strip()))
-    return toss_get_request(f"/api/v1/candles", f"symbol={symbol}&interval=1m")
-
-# --- 2. Stock Info (종목 정보 API) ---
 @app.get("/api/toss/stock/{query}")
 def get_stock_info(query: str):
     symbol = SYMBOL_MAP.get(query.strip(), SYMBOL_MAP.get(query.strip().upper(), query.strip()))
@@ -85,21 +86,10 @@ def get_investor_trading(query: str):
     symbol = SYMBOL_MAP.get(query.strip(), SYMBOL_MAP.get(query.strip().upper(), query.strip()))
     return toss_get_request(f"/api/v1/stocks/{symbol}/investor-trading")
 
-# --- 3. Market Info (환율 & 장 운영시간 API) ---
 @app.get("/api/toss/exchange-rate")
 def get_exchange_rate():
     return toss_get_request("/api/v1/exchange-rate")
 
-@app.get("/api/toss/market-calendar/{market_type}")
-def get_market_calendar(market_type: str):
-    # KR or US
-    return toss_get_request(f"/api/v1/market-calendar/{market_type.lower()}")
-
-# --- 4. Ranking & Indicators (랭킹 및 시장지표 API) ---
 @app.get("/api/toss/rankings")
 def get_rankings():
     return toss_get_request("/api/v1/rankings")
-
-@app.get("/api/toss/market-indicators")
-def get_market_indicators():
-    return toss_get_request("/api/v1/market-indicators/prices")
