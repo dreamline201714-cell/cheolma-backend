@@ -13,18 +13,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 토스증권 API 종목 매핑 (티커/한글 -> 토스 규격 Symbol)
 SYMBOL_MAP = {
-    "005930": "A005930",
-    "삼성전자": "A005930",
-    "000660": "A000660",
-    "SK하이닉스": "A000660",
-    "009150": "A009150",
-    "삼성전기": "A009150",
-    "NVDA": "NVDA",
-    "AAPL": "AAPL",
-    "MSFT": "MSFT",
-    "TSLA": "TSLA"
+    "005930": "A005930", "삼성전자": "A005930",
+    "000660": "A000660", "SK하이닉스": "A000660",
+    "009150": "A009150", "삼성전기": "A009150",
+    "NVDA": "NVDA", "AAPL": "AAPL", "MSFT": "MSFT", "TSLA": "TSLA"
 }
 
 def get_toss_token():
@@ -49,28 +42,64 @@ def get_toss_token():
         print(f"Token Error: {e}")
     return None
 
-@app.get("/api/toss/stock/{query}")
-def get_toss_stock_info(query: str):
+def toss_get_request(path: str, params: str = ""):
     token = get_toss_token()
     if not token:
-        return {"status": "error", "message": "API 인증 실패"}
+        return {"status": "error", "message": "API 인증 실패 (환경변수 확인 필요)"}
 
-    clean_query = query.strip()
-    target_symbol = SYMBOL_MAP.get(clean_query, SYMBOL_MAP.get(clean_query.upper(), clean_query))
-
-    url = f"https://openapi.tossinvest.com/api/v1/stocks?symbols={target_symbol}"
+    url = f"https://openapi.tossinvest.com{path}"
+    if params:
+        url += f"?{params}"
+        
     headers = {"Authorization": f"Bearer {token}"}
-    
     try:
         res = requests.get(url, headers=headers, timeout=5)
-        res_json = res.json()
-        
-        # 만약 매핑된 심볼로도 조회가 실패하면 원본 입력값으로 2차 시도
-        if not res_json.get("result") and target_symbol != clean_query:
-            fallback_url = f"https://openapi.tossinvest.com/api/v1/stocks?symbols={clean_query}"
-            res = requests.get(fallback_url, headers=headers, timeout=5)
-            res_json = res.json()
-            
-        return res_json
+        return res.json()
     except Exception as e:
         return {"status": "error", "message": str(e)}
+
+# --- 1. Market Data (시세 API) ---
+@app.get("/api/toss/prices/{query}")
+def get_prices(query: str):
+    symbol = SYMBOL_MAP.get(query.strip(), SYMBOL_MAP.get(query.strip().upper(), query.strip()))
+    return toss_get_request("/api/v1/prices", f"symbols={symbol}")
+
+@app.get("/api/toss/orderbook/{query}")
+def get_orderbook(query: str):
+    symbol = SYMBOL_MAP.get(query.strip(), SYMBOL_MAP.get(query.strip().upper(), query.strip()))
+    return toss_get_request("/api/v1/orderbook", f"symbols={symbol}")
+
+@app.get("/api/toss/candles/{query}")
+def get_candles(query: str):
+    symbol = SYMBOL_MAP.get(query.strip(), SYMBOL_MAP.get(query.strip().upper(), query.strip()))
+    return toss_get_request(f"/api/v1/candles", f"symbol={symbol}&interval=1m")
+
+# --- 2. Stock Info (종목 정보 API) ---
+@app.get("/api/toss/stock/{query}")
+def get_stock_info(query: str):
+    symbol = SYMBOL_MAP.get(query.strip(), SYMBOL_MAP.get(query.strip().upper(), query.strip()))
+    return toss_get_request("/api/v1/stocks", f"symbols={symbol}")
+
+@app.get("/api/toss/investor-trading/{query}")
+def get_investor_trading(query: str):
+    symbol = SYMBOL_MAP.get(query.strip(), SYMBOL_MAP.get(query.strip().upper(), query.strip()))
+    return toss_get_request(f"/api/v1/stocks/{symbol}/investor-trading")
+
+# --- 3. Market Info (환율 & 장 운영시간 API) ---
+@app.get("/api/toss/exchange-rate")
+def get_exchange_rate():
+    return toss_get_request("/api/v1/exchange-rate")
+
+@app.get("/api/toss/market-calendar/{market_type}")
+def get_market_calendar(market_type: str):
+    # KR or US
+    return toss_get_request(f"/api/v1/market-calendar/{market_type.lower()}")
+
+# --- 4. Ranking & Indicators (랭킹 및 시장지표 API) ---
+@app.get("/api/toss/rankings")
+def get_rankings():
+    return toss_get_request("/api/v1/rankings")
+
+@app.get("/api/toss/market-indicators")
+def get_market_indicators():
+    return toss_get_request("/api/v1/market-indicators/prices")
