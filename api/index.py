@@ -14,7 +14,7 @@ app.add_middleware(
 )
 
 
-# 디버깅용: 환경변수 로딩 여부 직접 확인
+# Vercel 서버의 Outbound IP 확인용 API
 @app.get("/api/debug-env")
 def debug_env():
   client_id = os.environ.get("TOSS_CLIENT_ID") or os.getenv("TOSS_CLIENT_ID")
@@ -22,17 +22,22 @@ def debug_env():
       "TOSS_CLIENT_SECRET"
   )
 
+  outbound_ip = "확인 불가"
+  try:
+    # Vercel 서버가 외부로 요청을 보낼 때 쓰는 IP 조회
+    outbound_ip = requests.get("https://api.ipify.org", timeout=5).text
+  except Exception as e:
+    outbound_ip = str(e)
+
   return {
       "has_client_id": bool(client_id),
       "has_client_secret": bool(client_secret),
-      "id_length": len(client_id) if client_id else 0,
+      "vercel_outbound_ip": outbound_ip,
   }
 
 
-# 기존 토스 API 호출 로직
 @app.get("/api/toss/stock/{symbol}")
 def get_toss_stock_price(symbol: str):
-  # os.environ으로 명시적 추출
   client_id = os.environ.get("TOSS_CLIENT_ID") or os.getenv("TOSS_CLIENT_ID")
   client_secret = os.environ.get("TOSS_CLIENT_SECRET") or os.getenv(
       "TOSS_CLIENT_SECRET"
@@ -44,7 +49,6 @@ def get_toss_stock_price(symbol: str):
         "message": "Toss API Key 인증 실패 (환경변수 미인식)",
     }
 
-  # 토큰 발급 요청
   url = "https://openapi.tossinvest.com/oauth2/token"
   headers = {"Content-Type": "application/x-www-form-urlencoded"}
   data = {
@@ -63,7 +67,6 @@ def get_toss_stock_price(symbol: str):
 
     access_token = token_res.json().get("access_token")
 
-    # 시세 조회 요청
     stock_url = f"https://openapi.tossinvest.com/api/v1/stocks?symbols={symbol}"
     stock_headers = {"Authorization": f"Bearer {access_token}"}
     stock_res = requests.get(stock_url, headers=stock_headers, timeout=5)
